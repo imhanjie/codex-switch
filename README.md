@@ -96,4 +96,4 @@ Tests/          # Core 与菜单栏逻辑测试
 
 ## License
 
-如果你准备公开仓库，建议补充一个明确的 License 文件，例如 MIT。
+本项目采用 [MIT License](LICENSE)。
