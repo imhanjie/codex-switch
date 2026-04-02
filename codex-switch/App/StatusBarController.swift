@@ -2,16 +2,43 @@ import AppKit
 import Combine
 import SwiftUI
 
-private final class PanelGlassContainerView: NSGlassEffectView {
+private final class PanelGlassContainerView: NSView {
     init(contentView hostedView: NSView, cornerRadius: CGFloat) {
         super.init(frame: .zero)
-        style = .regular
-        self.cornerRadius = cornerRadius
-        tintColor = NSColor.white.withAlphaComponent(0.08)
         wantsLayer = true
         layer?.cornerRadius = cornerRadius
         layer?.masksToBounds = true
-        contentView = hostedView
+
+        let backgroundView: NSView
+        if #available(macOS 26.0, *) {
+            let glassView = NSGlassEffectView(frame: .zero)
+            glassView.style = .regular
+            glassView.cornerRadius = cornerRadius
+            glassView.tintColor = NSColor.white.withAlphaComponent(0.08)
+            backgroundView = glassView
+        } else {
+            let visualEffectView = NSVisualEffectView(frame: .zero)
+            visualEffectView.material = .hudWindow
+            visualEffectView.blendingMode = .behindWindow
+            visualEffectView.state = .active
+            backgroundView = visualEffectView
+        }
+
+        backgroundView.translatesAutoresizingMaskIntoConstraints = false
+        hostedView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(backgroundView)
+        addSubview(hostedView)
+
+        NSLayoutConstraint.activate([
+            backgroundView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            backgroundView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            backgroundView.topAnchor.constraint(equalTo: topAnchor),
+            backgroundView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            hostedView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            hostedView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            hostedView.topAnchor.constraint(equalTo: topAnchor),
+            hostedView.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
     }
 
     @available(*, unavailable)
