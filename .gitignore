@@ -25,6 +25,7 @@ xcuserdata/
 
 # Common build output
 build/
+dist/
 
 # Codex local data
 .codex/

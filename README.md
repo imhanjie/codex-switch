@@ -37,6 +37,13 @@
 
 ## 安装与运行
 
+### 从 GitHub Releases 下载
+
+1. 打开仓库的 Releases 页面
+2. 下载最新版本里的 `.dmg` 或 `.zip`
+3. 将 `codex-switch.app` 拖到“应用程序”目录
+4. 首次打开如果被 macOS 拦截，请参考下方“首次打开未签名应用”
+
 ### 用 Xcode 运行
 
 1. 打开 `codex-switch.xcodeproj`
@@ -50,6 +57,18 @@ xcodebuild -project codex-switch.xcodeproj -scheme codex-switch
 swift test
 ```
 
+### 生成本地 Release 包
+
+```bash
+scripts/release.sh
+```
+
+脚本会执行以下步骤：
+
+- 运行 `swift test`
+- 构建 Release 版本 `.app`
+- 在 `dist/` 下生成 `.zip` 和 `.dmg`
+
 ## 使用说明
 
 1. 启动应用后，点击菜单栏中的 Codex Switch 图标
@@ -57,6 +76,15 @@ swift test
 3. 点击右下角 `+` 可发起一次新的 `codex login`
 4. 选择任意已管理账号并点击“切换”，应用会把对应快照写回 `~/.codex/auth.json`
 5. 切换完成后，请自行重启 Codex App、Codex CLI、Codex IDE 插件，确保新登录态生效
+
+## 首次打开未签名应用
+
+由于当前版本未使用 Apple Developer 证书签名，也没有进行 Apple notarization，macOS 首次打开时可能提示应用来自未识别开发者。
+
+可以使用以下任一方式打开：
+
+1. 在 Finder 中找到应用，右键选择“打开”
+2. 如果仍被拦截，前往“系统设置 -> 隐私与安全性”，点击“仍要打开”
 
 ## 数据存储
 
@@ -72,10 +100,27 @@ swift test
 - Swift tools: 6.0
 - Xcode 工程：`codex-switch.xcodeproj`
 - Swift Package 测试入口：`Package.swift`
+- 本地打包脚本：`scripts/release.sh`
+- GitHub Actions 发布流程：`.github/workflows/release.yml`
 
 本地已验证：
 
 - `swift test` 通过，共 27 个测试
+
+## Release 流程
+
+仓库已内置一个无签名发布流程：
+
+1. 本地确认代码无误
+2. 创建并推送版本标签，例如 `v1.0.0`
+3. GitHub Actions 会自动构建应用，并上传 `.zip` 和 `.dmg` 到该版本的 Release 页面
+
+示例：
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
 
 ## 项目结构
 
@@ -93,6 +138,7 @@ Tests/          # Core 与菜单栏逻辑测试
 - 本项目会读写本机 Codex 登录文件，请在了解其行为后使用
 - 删除账号仅删除本应用保存的快照，不会主动注销远端账号
 - 如果本机未安装 `codex` 命令，“登录新账号”功能将不可用
+- 当前 Release 为未签名版本，适合个人项目和早期开源分发
 
 ## License
 
