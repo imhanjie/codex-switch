@@ -9,20 +9,12 @@ private final class PanelGlassContainerView: NSView {
         layer?.cornerRadius = cornerRadius
         layer?.masksToBounds = true
 
-        let backgroundView: NSView
-        if #available(macOS 26.0, *) {
-            let glassView = NSGlassEffectView(frame: .zero)
-            glassView.style = .regular
-            glassView.cornerRadius = cornerRadius
-            glassView.tintColor = NSColor.white.withAlphaComponent(0.08)
-            backgroundView = glassView
-        } else {
-            let visualEffectView = NSVisualEffectView(frame: .zero)
-            visualEffectView.material = .hudWindow
-            visualEffectView.blendingMode = .behindWindow
-            visualEffectView.state = .active
-            backgroundView = visualEffectView
-        }
+        // Use the long-supported visual effect view so release builds stay
+        // compatible with older GitHub Actions macOS/Xcode runner images.
+        let backgroundView = NSVisualEffectView(frame: .zero)
+        backgroundView.material = .hudWindow
+        backgroundView.blendingMode = .behindWindow
+        backgroundView.state = .active
 
         backgroundView.translatesAutoresizingMaskIntoConstraints = false
         hostedView.translatesAutoresizingMaskIntoConstraints = false

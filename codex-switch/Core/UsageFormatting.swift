@@ -25,6 +25,7 @@ public enum UsageDisplayFormatter {
         let timeFormatter = DateFormatter()
         timeFormatter.locale = locale
         timeFormatter.calendar = calendar
+        timeFormatter.timeZone = calendar.timeZone
         timeFormatter.dateFormat = "HH:mm"
         let time = timeFormatter.string(from: date)
 
@@ -45,6 +46,7 @@ public enum UsageDisplayFormatter {
         let dateTimeFormatter = DateFormatter()
         dateTimeFormatter.locale = locale
         dateTimeFormatter.calendar = calendar
+        dateTimeFormatter.timeZone = calendar.timeZone
         dateTimeFormatter.dateFormat = "MM月dd日 HH:mm"
         return dateTimeFormatter.string(from: date)
     }
