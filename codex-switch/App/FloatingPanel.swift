@@ -12,7 +12,7 @@ final class FloatingPanel: NSPanel {
         )
 
         isFloatingPanel = true
-        hasShadow = false
+        hasShadow = true
         level = .statusBar
         backgroundColor = .clear
         isOpaque = false

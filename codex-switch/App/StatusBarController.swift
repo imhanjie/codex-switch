@@ -1,18 +1,41 @@
 import AppKit
+import Combine
 import SwiftUI
+
+private final class PanelGlassContainerView: NSGlassEffectView {
+    init(contentView hostedView: NSView, cornerRadius: CGFloat) {
+        super.init(frame: .zero)
+        style = .regular
+        self.cornerRadius = cornerRadius
+        tintColor = NSColor.white.withAlphaComponent(0.08)
+        wantsLayer = true
+        layer?.cornerRadius = cornerRadius
+        layer?.masksToBounds = true
+        contentView = hostedView
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+}
 
 @MainActor
 final class StatusBarController: NSObject, NSWindowDelegate {
     private let viewModel: MenuBarViewModel
     private let statusItem: NSStatusItem
     private var panel: FloatingPanel?
+    private var hostingView: NSHostingView<MenuBarPanelView>?
+    private var containerView: PanelGlassContainerView?
     private var globalMonitor: Any?
     private var localMonitor: Any?
+    private var themeModeCancellable: AnyCancellable?
 
     init(viewModel: MenuBarViewModel) {
         self.viewModel = viewModel
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
+        bindThemeMode()
         configureStatusItem()
     }
 
@@ -51,7 +74,7 @@ final class StatusBarController: NSObject, NSWindowDelegate {
 
     private func configureStatusItem() {
         guard let button = statusItem.button else { return }
-        let image = NSImage(systemSymbolName: "rectangle.2.swap", accessibilityDescription: "Codex Switch")
+        let image = NSImage(systemSymbolName: "hare.fill", accessibilityDescription: "Codex Switch")
         image?.isTemplate = true
         button.image = image
         button.imagePosition = .imageOnly
@@ -62,9 +85,6 @@ final class StatusBarController: NSObject, NSWindowDelegate {
 
     private func showStatusMenu(from button: NSStatusBarButton, event: NSEvent?) {
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "收录当前账号", action: #selector(captureCurrentAccount), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "登录新账号", action: #selector(loginNewAccount), keyEquivalent: ""))
-        menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "退出", action: #selector(quitApplication), keyEquivalent: "q"))
         menu.items.forEach { $0.target = self }
         button.highlight(true)
@@ -85,6 +105,7 @@ final class StatusBarController: NSObject, NSWindowDelegate {
         let panel = makePanelIfNeeded()
         positionPanel(panel, relativeTo: button)
         statusItem.button?.highlight(true)
+        panel.invalidateShadow()
         panel.makeKeyAndOrderFront(nil)
         installEventMonitors()
         viewModel.loadPanel()
@@ -100,7 +121,22 @@ final class StatusBarController: NSObject, NSWindowDelegate {
         panel.onCancel = { [weak self] in
             self?.closePanel()
         }
-        panel.contentView = NSHostingView(rootView: MenuBarPanelView(viewModel: viewModel))
+        let hostingView = NSHostingView(
+            rootView: MenuBarPanelView(
+                viewModel: viewModel,
+                closePanel: { [weak self] in
+                    self?.closePanel()
+                }
+            )
+        )
+        hostingView.wantsLayer = true
+        hostingView.layer?.backgroundColor = NSColor.clear.cgColor
+        let containerView = PanelGlassContainerView(contentView: hostingView, cornerRadius: 18)
+        panel.contentView = containerView
+        self.hostingView = hostingView
+        self.containerView = containerView
+        applyPanelAppearance(for: viewModel.themeMode)
+        panel.invalidateShadow()
         self.panel = panel
         return panel
     }
@@ -122,6 +158,22 @@ final class StatusBarController: NSObject, NSWindowDelegate {
         panel?.orderOut(nil)
         statusItem.button?.highlight(false)
         removeEventMonitors()
+    }
+
+    private func bindThemeMode() {
+        themeModeCancellable = viewModel.$themeMode
+            .sink { [weak self] mode in
+                self?.applyPanelAppearance(for: mode)
+            }
+    }
+
+    private func applyPanelAppearance(for mode: PanelThemeMode) {
+        let appearance = mode.nsAppearance
+        panel?.appearance = appearance
+        hostingView?.appearance = appearance
+        containerView?.appearance = appearance
+        panel?.invalidateShadow()
+        panel?.contentView?.needsDisplay = true
     }
 
     private func installEventMonitors() {

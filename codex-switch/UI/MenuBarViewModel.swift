@@ -1,8 +1,86 @@
+import AppKit
 import Combine
 import Foundation
 #if SWIFT_PACKAGE
 import CodexSwitchCore
 #endif
+
+enum PanelThemeMode: String, CaseIterable {
+    case light
+    case dark
+    case system
+
+    var next: PanelThemeMode {
+        switch self {
+        case .light:
+            return .dark
+        case .dark:
+            return .system
+        case .system:
+            return .light
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .light:
+            return "浅色"
+        case .dark:
+            return "深色"
+        case .system:
+            return "跟随系统"
+        }
+    }
+
+    var iconSystemName: String {
+        switch self {
+        case .light:
+            return "sun.max.fill"
+        case .dark:
+            return "moon.fill"
+        case .system:
+            return "circle.lefthalf.filled"
+        }
+    }
+
+    var buttonLabel: String {
+        "主题模式：\(displayName)，点击切换到\(next.displayName)"
+    }
+
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .light:
+            return NSAppearance(named: .aqua)
+        case .dark:
+            return NSAppearance(named: .darkAqua)
+        case .system:
+            return nil
+        }
+    }
+}
+
+protocol ThemePreferenceStoring {
+    func loadThemeMode() -> PanelThemeMode?
+    func saveThemeMode(_ mode: PanelThemeMode)
+}
+
+struct UserDefaultsThemePreferenceStore: ThemePreferenceStoring {
+    private let defaults: UserDefaults
+    private let key: String
+
+    init(defaults: UserDefaults = .standard, key: String = "panel_theme_mode") {
+        self.defaults = defaults
+        self.key = key
+    }
+
+    func loadThemeMode() -> PanelThemeMode? {
+        defaults.string(forKey: key).flatMap(PanelThemeMode.init(rawValue:))
+    }
+
+    func saveThemeMode(_ mode: PanelThemeMode) {
+        defaults.set(mode.rawValue, forKey: key)
+    }
+}
 
 protocol MenuBarServicing: Sendable {
     func loadDashboard() async throws -> DashboardSnapshot
@@ -13,9 +91,28 @@ protocol MenuBarServicing: Sendable {
     func refreshUsage() async throws -> UsageRefreshResult
 }
 
-protocol UsageRefreshScheduling: Sendable {
+protocol UsageRefreshScheduling {
     @MainActor
     func schedule(every interval: TimeInterval, action: @escaping @MainActor () -> Void) -> AnyCancellable
+}
+
+protocol AccountSwitchConfirming {
+    @MainActor
+    func confirmSwitchAccount() -> Bool
+}
+
+struct DefaultAccountSwitchConfirmer: AccountSwitchConfirming {
+    @MainActor
+    func confirmSwitchAccount() -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "确认切换账号"
+        alert.informativeText = "切换后请自行重启 Codex App、Codex CLI、Codex IDE 插件"
+        alert.alertStyle = .warning
+        alert.icon = NSApp.applicationIconImage
+        alert.addButton(withTitle: "切换")
+        alert.addButton(withTitle: "取消")
+        return alert.runModal() == .alertFirstButtonReturn
+    }
 }
 
 struct DefaultMenuBarService: MenuBarServicing {
@@ -66,6 +163,7 @@ final class MenuBarViewModel: ObservableObject {
     nonisolated static let defaultAutoRefreshInterval: TimeInterval = 300
 
     @Published private(set) var accounts: [AccountDisplayItem] = []
+    @Published private(set) var themeMode: PanelThemeMode
     @Published private(set) var unmanagedLiveEmail: String?
     @Published private(set) var notice: PanelNotice?
     @Published private(set) var isRefreshingUsage = false
@@ -75,6 +173,10 @@ final class MenuBarViewModel: ObservableObject {
     @Published private(set) var isRemoving = false
 
     private let service: any MenuBarServicing
+    private let switchConfirmer: any AccountSwitchConfirming
+    private let themePreferenceStore: any ThemePreferenceStoring
+    private let autoRefreshInterval: TimeInterval
+    private let scheduler: any UsageRefreshScheduling
     private var sourceAccounts: [ManagedAccount] = []
     private var usageByRecordKey: [String: UsageSummary] = [:]
     private var activeRecordKey: String?
@@ -83,19 +185,50 @@ final class MenuBarViewModel: ObservableObject {
 
     init(
         service: any MenuBarServicing = DefaultMenuBarService(),
+        switchConfirmer: any AccountSwitchConfirming = DefaultAccountSwitchConfirmer(),
+        themePreferenceStore: any ThemePreferenceStoring = UserDefaultsThemePreferenceStore(),
         autoRefreshInterval: TimeInterval = defaultAutoRefreshInterval,
         scheduler: any UsageRefreshScheduling = TimerUsageRefreshScheduler()
     ) {
         self.service = service
-        if autoRefreshInterval > 0 {
-            autoRefreshCancellable = scheduler.schedule(every: autoRefreshInterval) { [weak self] in
-                self?.refreshUsage(force: false, showSuccessNotice: false)
-            }
-        }
+        self.switchConfirmer = switchConfirmer
+        self.themePreferenceStore = themePreferenceStore
+        self.themeMode = themePreferenceStore.loadThemeMode() ?? .light
+        self.autoRefreshInterval = autoRefreshInterval
+        self.scheduler = scheduler
+        scheduleAutoRefresh()
     }
 
-    var isBusy: Bool {
-        isRefreshingUsage || isRunningLogin || isCapturing || isRemoving || pendingRecordKey != nil
+    var canRefreshUsage: Bool {
+        !isRefreshingUsage
+    }
+
+    var canCaptureCurrentAccount: Bool {
+        !isCapturing
+    }
+
+    var canLoginNewAccount: Bool {
+        !isRunningLogin
+    }
+
+    var canRemoveAccount: Bool {
+        !isRemoving
+    }
+
+    var canSwitchAccounts: Bool {
+        pendingRecordKey == nil
+    }
+
+    var lastUsageRefreshText: String {
+        UsageDisplayFormatter.lastRefreshText(for: latestUsageRefreshDate)
+    }
+
+    var themeButtonSystemName: String {
+        themeMode.iconSystemName
+    }
+
+    var themeButtonAccessibilityLabel: String {
+        themeMode.buttonLabel
     }
 
     func loadPanel() {
@@ -109,6 +242,9 @@ final class MenuBarViewModel: ObservableObject {
     }
 
     func refreshUsage(force: Bool, showSuccessNotice: Bool) {
+        if force {
+            scheduleAutoRefresh()
+        }
         guard force || !isRefreshingUsage else { return }
         Task { [weak self] in
             await self?.performUsageRefresh(showSuccessNotice: showSuccessNotice)
@@ -116,7 +252,7 @@ final class MenuBarViewModel: ObservableObject {
     }
 
     func captureCurrentAccount() {
-        guard !isBusy else { return }
+        guard canCaptureCurrentAccount else { return }
         isCapturing = true
         Task { [weak self] in
             guard let self else { return }
@@ -135,7 +271,7 @@ final class MenuBarViewModel: ObservableObject {
     }
 
     func loginNewAccount() {
-        guard !isBusy else { return }
+        guard canLoginNewAccount else { return }
         isRunningLogin = true
         notice = PanelNotice.info("正在打开 Codex 登录流程...")
 
@@ -156,7 +292,8 @@ final class MenuBarViewModel: ObservableObject {
     }
 
     func switchAccount(recordKey: String) {
-        guard !isBusy else { return }
+        guard canSwitchAccounts else { return }
+        guard switchConfirmer.confirmSwitchAccount() else { return }
         pendingRecordKey = recordKey
 
         Task { [weak self] in
@@ -165,7 +302,7 @@ final class MenuBarViewModel: ObservableObject {
 
             do {
                 let account = try await self.service.switchAccount(recordKey: recordKey)
-                self.notice = PanelNotice.success("已切换到：\(account.email)。如果 Codex CLI 或 App 已在运行，请手动重启后再使用。")
+                self.notice = PanelNotice.success("已切换到：\(account.email)")
                 await self.reloadDashboard(preserveNotice: true)
             } catch let error as CodexSwitchError {
                 self.notice = PanelNotice.error(error.message)
@@ -176,7 +313,7 @@ final class MenuBarViewModel: ObservableObject {
     }
 
     func removeAccount(recordKey: String) {
-        guard !isBusy else { return }
+        guard canRemoveAccount else { return }
         isRemoving = true
 
         Task { [weak self] in
@@ -193,6 +330,12 @@ final class MenuBarViewModel: ObservableObject {
                 self.notice = PanelNotice.error(error.localizedDescription)
             }
         }
+    }
+
+    func cycleThemeMode() {
+        let nextMode = themeMode.next
+        themeMode = nextMode
+        themePreferenceStore.saveThemeMode(nextMode)
     }
 
     private func reloadDashboard(preserveNotice: Bool) async {
@@ -274,6 +417,20 @@ final class MenuBarViewModel: ObservableObject {
                     isPending: account.recordKey == pendingRecordKey
                 )
             }
+    }
+
+    private var latestUsageRefreshDate: Date? {
+        usageByRecordKey.values.map(\.fetchedAt).max()
+    }
+
+    private func scheduleAutoRefresh() {
+        autoRefreshCancellable?.cancel()
+        autoRefreshCancellable = nil
+
+        guard autoRefreshInterval > 0 else { return }
+        autoRefreshCancellable = scheduler.schedule(every: autoRefreshInterval) { [weak self] in
+            self?.refreshUsage(force: false, showSuccessNotice: false)
+        }
     }
 }
 

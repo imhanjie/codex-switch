@@ -1,7 +1,9 @@
+import AppKit
 import SwiftUI
 
 struct MenuBarPanelView: View {
     @ObservedObject var viewModel: MenuBarViewModel
+    let closePanel: () -> Void
 
     var body: some View {
         ZStack {
@@ -10,70 +12,87 @@ struct MenuBarPanelView: View {
             VStack(alignment: .leading, spacing: 14) {
                 header
 
-                if let unmanagedLiveEmail = viewModel.unmanagedLiveEmail {
-                    banner(
-                        title: "发现未纳管 live 账号",
-                        message: unmanagedLiveEmail,
-                        tint: Color(red: 0.95, green: 0.72, blue: 0.39)
-                    ) {
-                        viewModel.captureCurrentAccount()
-                    }
-                }
-
-                if let notice = viewModel.notice {
-                    noticeView(notice)
-                }
-
                 if viewModel.accounts.isEmpty {
                     emptyState
                 } else {
                     loadedState
                 }
+
+                bottomBar
             }
             .padding(16)
         }
-        .frame(width: 344)
+        .frame(width: 344, height: 640)
         .background(Color.clear)
     }
 
     private var header: some View {
         HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Codex Switcher")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.96))
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .center, spacing: 10) {
+                    titleIcon
 
-                Text("切换和管理 Codex 账号")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.48))
+                    Text("Codex Switch")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(PanelTheme.textPrimary)
+                }
+
+                Text("当前共 \(viewModel.accounts.count) 个账号")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(PanelTheme.textTertiary)
+                    .padding(.top, 6)
             }
 
             Spacer(minLength: 0)
 
-            Button {
-                viewModel.refreshUsage(force: true)
-            } label: {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.white.opacity(0.08))
+            VStack(alignment: .trailing, spacing: 6) {
+                Button {
+                    viewModel.refreshUsage(force: true)
+                } label: {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(PanelTheme.secondaryControlFill)
 
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(PanelTheme.secondaryControlStroke, lineWidth: 1)
 
-                    if viewModel.isRefreshingUsage {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(.white)
-                    } else {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Color.white.opacity(0.86))
+                        if viewModel.isRefreshingUsage {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(PanelTheme.primaryAccent)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(PanelTheme.textPrimary)
+                        }
                     }
+                    .frame(width: 34, height: 34)
                 }
-                .frame(width: 34, height: 34)
+                .buttonStyle(.plain)
+                .disabled(!viewModel.canRefreshUsage)
+
+                Text(viewModel.lastUsageRefreshText)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(PanelTheme.textTertiary)
+                    .padding(.top, 6)
             }
-            .buttonStyle(.plain)
-            .disabled(viewModel.isBusy && !viewModel.isRefreshingUsage)
+            .padding(.top, 3)
+        }
+    }
+
+    @ViewBuilder
+    private var titleIcon: some View {
+        if let url = Bundle.main.url(forResource: "CodexAppIcon", withExtension: "icns"),
+           let image = NSImage(contentsOf: url) {
+            Image(nsImage: image)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 40, height: 40)
+        } else {
+            Image(systemName: "app.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(PanelTheme.primaryAccent)
+                .frame(width: 40, height: 40)
         }
     }
 
@@ -88,73 +107,51 @@ struct MenuBarPanelView: View {
                             } label: {
                                 Label("删除账号", systemImage: "trash")
                             }
+                            .disabled(!viewModel.canRemoveAccount)
                         }
                 }
-
-                footerActions
             }
-            .padding(.bottom, 4)
         }
-        .frame(maxHeight: 620)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 14) {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.white.opacity(0.05))
+                .fill(PanelTheme.cardFill(isCurrent: false))
                 .overlay(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                        .stroke(PanelTheme.cardStroke(isCurrent: false), lineWidth: 1)
                 )
                 .overlay(alignment: .topLeading) {
                     VStack(alignment: .leading, spacing: 10) {
                         Image(systemName: "person.crop.circle.badge.questionmark")
                             .font(.system(size: 24, weight: .medium))
-                            .foregroundStyle(Color.white.opacity(0.88))
+                            .foregroundStyle(PanelTheme.textSecondary)
 
                         Text("还没有已管理账号")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(Color.white.opacity(0.94))
+                            .foregroundStyle(PanelTheme.textPrimary)
 
                         Text("先收录当前 live 账号，或者发起一次新的 Codex 登录。")
                             .font(.system(size: 13, weight: .regular))
-                            .foregroundStyle(Color.white.opacity(0.58))
+                            .foregroundStyle(PanelTheme.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
-
-                        HStack(spacing: 10) {
-                            secondaryButton(title: "收录当前账号") {
-                                viewModel.captureCurrentAccount()
-                            }
-
-                            primaryButton(title: "登录新账号") {
-                                viewModel.loginNewAccount()
-                            }
-                        }
                     }
                     .padding(16)
                 }
-                .frame(height: 184)
-
-            footerActions
+                .frame(height: 148)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func accountCard(_ item: AccountDisplayItem) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(item.account.email)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Color.white.opacity(0.94))
-                        .lineLimit(1)
-
-                    if let metadataText = item.metadataText {
-                        Text(metadataText)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(Color.white.opacity(0.44))
-                            .lineLimit(1)
-                    }
-                }
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 12) {
+                Text(item.account.email)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(PanelTheme.textPrimary)
+                    .lineLimit(1)
 
                 Spacer(minLength: 0)
 
@@ -162,27 +159,26 @@ struct MenuBarPanelView: View {
             }
 
             usageRow(
-                title: "5 小时限制剩余",
+                title: "5小时剩余",
                 window: item.usage?.fiveHour,
-                accent: Color(red: 0.27, green: 0.79, blue: 0.73),
                 weekly: false
             )
 
             usageRow(
-                title: "每周限制剩余",
+                title: "每周剩余",
                 window: item.usage?.weekly,
-                accent: Color(red: 0.38, green: 0.62, blue: 1.0),
                 weekly: true
             )
         }
-        .padding(14)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(cardFill(isCurrent: item.isCurrent))
+                .fill(PanelTheme.cardFill(isCurrent: item.isCurrent))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(cardStroke(isCurrent: item.isCurrent), lineWidth: 1)
+                .strokeBorder(PanelTheme.cardStroke(isCurrent: item.isCurrent), lineWidth: 1)
         )
     }
 
@@ -191,65 +187,73 @@ struct MenuBarPanelView: View {
         if item.isCurrent {
             Text("使用中")
                 .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(0.94))
+                .foregroundStyle(PanelTheme.primaryButtonText)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
                 .background(
                     Capsule(style: .continuous)
-                        .fill(Color(red: 0.19, green: 0.46, blue: 0.93))
+                        .fill(PanelTheme.primaryAccent)
                 )
         } else {
             Button {
-                viewModel.switchAccount(recordKey: item.account.recordKey)
+                closePanel()
+                DispatchQueue.main.async {
+                    viewModel.switchAccount(recordKey: item.account.recordKey)
+                }
             } label: {
                 HStack(spacing: 6) {
                     if item.isPending {
                         ProgressView()
                             .controlSize(.small)
-                            .tint(.white)
+                            .tint(PanelTheme.primaryAccent)
                     } else {
                         Text("切换")
                             .font(.system(size: 10, weight: .semibold))
                     }
                 }
-                .foregroundStyle(Color.white.opacity(0.96))
+                .foregroundStyle(PanelTheme.textPrimary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
                 .background(
                     Capsule(style: .continuous)
-                        .fill(Color.white.opacity(0.09))
+                        .fill(PanelTheme.secondaryControlFill)
                 )
                 .overlay(
                     Capsule(style: .continuous)
-                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                        .stroke(PanelTheme.secondaryControlStroke, lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)
-            .disabled(viewModel.isBusy)
+            .disabled(!viewModel.canSwitchAccounts)
         }
     }
 
-    private func usageRow(title: String, window: UsageWindow?, accent: Color, weekly: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
+    private func usageRow(title: String, window: UsageWindow?, weekly: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text(title)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.50))
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(title)
+                        .foregroundStyle(PanelTheme.textTertiary)
+
+                    Text(usagePercentText(for: window))
+                        .foregroundStyle(PanelTheme.textSecondary)
+                }
+                .font(.system(size: 10, weight: .medium))
 
                 Spacer(minLength: 0)
 
                 Text(usageText(window: window, weekly: weekly))
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.76))
+                    .foregroundStyle(PanelTheme.textSecondary)
             }
 
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
                     Capsule(style: .continuous)
-                        .fill(Color.white.opacity(0.07))
+                        .fill(PanelTheme.progressTrack)
 
                     Capsule(style: .continuous)
-                        .fill(accent)
+                        .fill(progressAccent(for: window))
                         .frame(width: max(10, proxy.size.width * remainingFraction(for: window)))
                 }
             }
@@ -257,39 +261,72 @@ struct MenuBarPanelView: View {
         }
     }
 
-    private var footerActions: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("快捷操作")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Color.white.opacity(0.44))
-
-            HStack(spacing: 10) {
-                secondaryButton(title: "收录当前账号") {
+    private var bottomBar: some View {
+        HStack(alignment: .bottom, spacing: 12) {
+            if let notice = viewModel.notice {
+                compactNoticeView(notice)
+            } else if let unmanagedLiveEmail = viewModel.unmanagedLiveEmail {
+                compactStatusBanner(
+                    title: "发现未纳管 live 账号",
+                    message: unmanagedLiveEmail,
+                    tint: PanelTheme.warningAccent
+                ) {
                     viewModel.captureCurrentAccount()
                 }
-
-                primaryButton(title: "登录新账号") {
-                    viewModel.loginNewAccount()
-                }
             }
+
+            Spacer(minLength: 0)
+
+            floatingActions
         }
-        .padding(.top, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func banner(title: String, message: String, tint: Color, action: @escaping () -> Void) -> some View {
+    private var floatingActions: some View {
+        HStack(spacing: 10) {
+            iconActionButton(
+                systemName: viewModel.themeButtonSystemName,
+                accessibilityLabel: viewModel.themeButtonAccessibilityLabel,
+                isPrimary: false,
+                isDisabled: false
+            ) {
+                viewModel.cycleThemeMode()
+            }
+
+            iconActionButton(
+                systemName: "tray.and.arrow.down",
+                accessibilityLabel: "收录当前账号",
+                isPrimary: false,
+                isDisabled: !viewModel.canCaptureCurrentAccount
+            ) {
+                viewModel.captureCurrentAccount()
+            }
+
+            iconActionButton(
+                systemName: "plus",
+                accessibilityLabel: "登录新账号",
+                isPrimary: true,
+                isDisabled: false
+            ) {
+                viewModel.loginNewAccount()
+            }
+        }
+    }
+
+    private func compactStatusBanner(title: String, message: String, tint: Color, action: @escaping () -> Void) -> some View {
         HStack(alignment: .center, spacing: 10) {
             Circle()
                 .fill(tint)
-                .frame(width: 8, height: 8)
+                .frame(width: 7, height: 7)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.92))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(PanelTheme.textPrimary)
 
                 Text(message)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.56))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(PanelTheme.textSecondary)
                     .lineLimit(1)
             }
 
@@ -299,142 +336,100 @@ struct MenuBarPanelView: View {
                 action()
             }
             .buttonStyle(.plain)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(Color.white.opacity(0.96))
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(PanelTheme.primaryAccent)
         }
-        .padding(12)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: 220, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.white.opacity(0.05))
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(PanelTheme.bannerFill)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(PanelTheme.bannerStroke, lineWidth: 1)
         )
     }
 
-    private func noticeView(_ notice: PanelNotice) -> some View {
+    private func compactNoticeView(_ notice: PanelNotice) -> some View {
         let tint: Color = {
             switch notice.style {
             case .info:
-                return Color(red: 0.39, green: 0.62, blue: 1.0)
+                return PanelTheme.primaryAccent
             case .success:
-                return Color(red: 0.27, green: 0.79, blue: 0.73)
+                return PanelTheme.successAccent
             case .error:
-                return Color(red: 0.95, green: 0.46, blue: 0.54)
+                return PanelTheme.errorAccent
             }
         }()
 
         return HStack(alignment: .top, spacing: 10) {
             Circle()
                 .fill(tint)
-                .frame(width: 8, height: 8)
-                .padding(.top, 4)
+                .frame(width: 7, height: 7)
+                .padding(.top, 3)
 
             Text(notice.text)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color.white.opacity(0.84))
-                .fixedSize(horizontal: false, vertical: true)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(PanelTheme.textSecondary)
+                .lineLimit(2)
         }
-        .padding(12)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: 220, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.white.opacity(0.05))
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(PanelTheme.bannerFill)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(PanelTheme.bannerStroke, lineWidth: 1)
         )
     }
 
-    private func primaryButton(title: String, action: @escaping () -> Void) -> some View {
+    private func iconActionButton(
+        systemName: String,
+        accessibilityLabel: String,
+        isPrimary: Bool,
+        isDisabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(0.96))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(
+            Image(systemName: systemName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(isPrimary ? PanelTheme.primaryButtonText : PanelTheme.textPrimary)
+                .frame(width: 34, height: 34)
+                .background {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color(red: 0.29, green: 0.49, blue: 0.95),
-                                    Color(red: 0.18, green: 0.33, blue: 0.84),
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
+                        .fill(PanelTheme.secondaryButtonFill)
+
+                    if isPrimary {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(PanelTheme.primaryButtonFill)
+                    }
+                }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(
+                            isPrimary ? Color.clear : PanelTheme.secondaryButtonStroke,
+                            lineWidth: 1
                         )
                 )
         }
         .buttonStyle(.plain)
-        .disabled(viewModel.isBusy)
-    }
-
-    private func secondaryButton(title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(0.92))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color.white.opacity(0.07))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
-                )
-        }
-        .buttonStyle(.plain)
-        .disabled(viewModel.isBusy)
+        .disabled(isDisabled)
+        .help(accessibilityLabel)
+        .accessibilityLabel(accessibilityLabel)
     }
 
     private var panelBackground: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color(red: 0.10, green: 0.12, blue: 0.21),
-                            Color(red: 0.07, green: 0.09, blue: 0.17),
-                            Color(red: 0.11, green: 0.14, blue: 0.25),
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-
-            RadialGradient(
-                colors: [
-                    Color(red: 0.24, green: 0.34, blue: 0.70).opacity(0.28),
-                    Color.clear,
-                ],
-                center: .topTrailing,
-                startRadius: 20,
-                endRadius: 180
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(Color.clear)
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(PanelTheme.panelStroke, lineWidth: 1)
             )
-            .offset(x: 24, y: -18)
-
-            RadialGradient(
-                colors: [
-                    Color(red: 0.14, green: 0.58, blue: 0.54).opacity(0.18),
-                    Color.clear,
-                ],
-                center: .bottomLeading,
-                startRadius: 10,
-                endRadius: 180
-            )
-            .offset(x: -36, y: 32)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.30), radius: 28, x: 0, y: 16)
     }
 
     private func remainingFraction(for window: UsageWindow?) -> CGFloat {
@@ -443,33 +438,81 @@ struct MenuBarPanelView: View {
     }
 
     private func usageText(window: UsageWindow?, weekly: Bool) -> String {
-        guard window != nil else { return "- · 暂无数据" }
-        return "\(UsageDisplayFormatter.percentText(for: window)) · \(UsageDisplayFormatter.resetText(for: window, weekly: weekly))"
+        guard window != nil else { return "暂无数据" }
+        return UsageDisplayFormatter.resetText(for: window, weekly: weekly)
     }
 
-    private func cardFill(isCurrent: Bool) -> LinearGradient {
+    private func usagePercentText(for window: UsageWindow?) -> String {
+        guard window != nil else { return "-" }
+        return UsageDisplayFormatter.percentText(for: window)
+    }
+
+    private func progressAccent(for window: UsageWindow?) -> Color {
+        guard let remainingPercent = window?.remainingPercent else {
+            return Color(nsColor: .quaternaryLabelColor)
+        }
+
+        switch remainingPercent {
+        case 80...100:
+            return Color(nsColor: .systemGreen)
+        case 60..<80:
+            return Color(nsColor: .systemYellow)
+        case 40..<60:
+            return Color(nsColor: .systemOrange)
+        default:
+            return Color(nsColor: .systemRed)
+        }
+    }
+}
+
+private enum PanelTheme {
+    static let textPrimary = Color(nsColor: .labelColor)
+    static let textSecondary = Color(nsColor: .secondaryLabelColor)
+    static let textTertiary = Color(nsColor: .tertiaryLabelColor)
+    static let textQuaternary = Color(nsColor: .quaternaryLabelColor)
+
+    static let primaryAccent = Color(nsColor: .controlAccentColor)
+    static let successAccent = Color(nsColor: .systemGreen)
+    static let warningAccent = Color(nsColor: .systemOrange)
+    static let errorAccent = Color(nsColor: .systemRed)
+
+    static let primaryButtonText = Color(nsColor: .alternateSelectedControlTextColor)
+    static let panelStroke = Color(nsColor: .separatorColor).opacity(0.42)
+
+    static let secondaryControlFill = Color(nsColor: .controlBackgroundColor).opacity(0.72)
+    static let secondaryControlStroke = Color(nsColor: .separatorColor).opacity(0.62)
+    static let secondaryButtonFill = Color(nsColor: .windowBackgroundColor).opacity(0.82)
+    static let secondaryButtonStroke = Color(nsColor: .separatorColor).opacity(0.58)
+
+    static let bannerFill = Color(nsColor: .windowBackgroundColor).opacity(0.74)
+    static let bannerStroke = Color(nsColor: .separatorColor).opacity(0.54)
+    static let progressTrack = Color(nsColor: .quaternaryLabelColor).opacity(0.18)
+
+    static let primaryButtonFill = LinearGradient(
+        colors: [
+            primaryAccent.opacity(0.96),
+            primaryAccent.opacity(0.82),
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+
+    static func cardFill(isCurrent: Bool) -> AnyShapeStyle {
         if isCurrent {
-            return LinearGradient(
+            return AnyShapeStyle(LinearGradient(
                 colors: [
-                    Color(red: 0.18, green: 0.24, blue: 0.42),
-                    Color(red: 0.14, green: 0.18, blue: 0.33),
+                    primaryAccent.opacity(0.20),
+                    primaryAccent.opacity(0.12),
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
-            )
+            ))
         }
 
-        return LinearGradient(
-            colors: [
-                Color.white.opacity(0.06),
-                Color.white.opacity(0.04),
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+        return AnyShapeStyle(Color(nsColor: .controlBackgroundColor).opacity(0.1))
     }
 
-    private func cardStroke(isCurrent: Bool) -> Color {
-        isCurrent ? Color(red: 0.29, green: 0.49, blue: 0.95).opacity(0.42) : Color.white.opacity(0.08)
+    static func cardStroke(isCurrent: Bool) -> Color {
+        isCurrent ? primaryAccent.opacity(0.56) : Color(nsColor: .separatorColor).opacity(0.62)
     }
 }

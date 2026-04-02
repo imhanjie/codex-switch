@@ -25,3 +25,6 @@ xcuserdata/
 
 # Common build output
 build/
+
+# Codex local data
+.codex/

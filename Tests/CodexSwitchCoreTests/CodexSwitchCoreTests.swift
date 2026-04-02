@@ -239,6 +239,57 @@ final class CodexSwitchCoreTests: XCTestCase {
         XCTAssertEqual(registry.activeRecordKey, "user-login::acct-login")
         XCTAssertEqual(registry.accounts.count, 1)
     }
+
+    func testRelativeDateTimeTextFormatsYesterdayTodayTomorrowAndOtherDates() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let locale = Locale(identifier: "zh_CN")
+        let referenceDate = makeDate(year: 2026, month: 3, day: 28, hour: 10, minute: 0, calendar: calendar)
+
+        let earlier = makeDate(year: 2026, month: 3, day: 26, hour: 23, minute: 20, calendar: calendar)
+        let yesterday = makeDate(year: 2026, month: 3, day: 27, hour: 23, minute: 20, calendar: calendar)
+        let today = makeDate(year: 2026, month: 3, day: 28, hour: 23, minute: 20, calendar: calendar)
+        let tomorrow = makeDate(year: 2026, month: 3, day: 29, hour: 23, minute: 20, calendar: calendar)
+        let later = makeDate(year: 2026, month: 4, day: 1, hour: 23, minute: 20, calendar: calendar)
+
+        XCTAssertEqual(
+            UsageDisplayFormatter.relativeDateTimeText(for: earlier, relativeTo: referenceDate, calendar: calendar, locale: locale),
+            "03月26日 23:20"
+        )
+        XCTAssertEqual(
+            UsageDisplayFormatter.relativeDateTimeText(for: yesterday, relativeTo: referenceDate, calendar: calendar, locale: locale),
+            "昨天 23:20"
+        )
+        XCTAssertEqual(
+            UsageDisplayFormatter.relativeDateTimeText(for: today, relativeTo: referenceDate, calendar: calendar, locale: locale),
+            "23:20"
+        )
+        XCTAssertEqual(
+            UsageDisplayFormatter.relativeDateTimeText(for: tomorrow, relativeTo: referenceDate, calendar: calendar, locale: locale),
+            "明天 23:20"
+        )
+        XCTAssertEqual(
+            UsageDisplayFormatter.relativeDateTimeText(for: later, relativeTo: referenceDate, calendar: calendar, locale: locale),
+            "04月01日 23:20"
+        )
+    }
+
+    func testLastRefreshTextUsesUnifiedRelativeDateFormatting() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let locale = Locale(identifier: "zh_CN")
+        let referenceDate = makeDate(year: 2026, month: 3, day: 28, hour: 10, minute: 0, calendar: calendar)
+        let refreshedAt = makeDate(year: 2026, month: 3, day: 28, hour: 9, minute: 42, calendar: calendar)
+
+        XCTAssertEqual(
+            UsageDisplayFormatter.lastRefreshText(for: refreshedAt, relativeTo: referenceDate, calendar: calendar, locale: locale),
+            "上次刷新 · 09:42"
+        )
+        XCTAssertEqual(
+            UsageDisplayFormatter.lastRefreshText(for: nil, relativeTo: referenceDate, calendar: calendar, locale: locale),
+            "上次刷新 · -"
+        )
+    }
 }
 
 private struct TestHarness {
@@ -378,4 +429,23 @@ private func base64URL(_ value: [String: Any]) -> String {
         .replacingOccurrences(of: "+", with: "-")
         .replacingOccurrences(of: "/", with: "_")
         .replacingOccurrences(of: "=", with: "")
+}
+
+private func makeDate(
+    year: Int,
+    month: Int,
+    day: Int,
+    hour: Int,
+    minute: Int,
+    calendar: Calendar
+) -> Date {
+    var components = DateComponents()
+    components.calendar = calendar
+    components.timeZone = calendar.timeZone
+    components.year = year
+    components.month = month
+    components.day = day
+    components.hour = hour
+    components.minute = minute
+    return components.date!
 }

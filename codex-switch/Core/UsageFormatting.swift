@@ -6,22 +6,53 @@ public enum UsageDisplayFormatter {
         return "\(window.remainingPercent)%"
     }
 
-    public static func resetText(for window: UsageWindow?, weekly: Bool) -> String {
-        guard let date = window?.resetAt else {
-            return "-"
-        }
+    public static func lastRefreshText(
+        for date: Date?,
+        relativeTo referenceDate: Date = Date(),
+        calendar: Calendar = .current,
+        locale: Locale = Locale(identifier: "zh_CN")
+    ) -> String {
+        guard let date else { return "上次刷新 · -" }
+        return "上次刷新 · \(relativeDateTimeText(for: date, relativeTo: referenceDate, calendar: calendar, locale: locale))"
+    }
 
+    public static func relativeDateTimeText(
+        for date: Date,
+        relativeTo referenceDate: Date = Date(),
+        calendar: Calendar = .current,
+        locale: Locale = Locale(identifier: "zh_CN")
+    ) -> String {
         let timeFormatter = DateFormatter()
-        timeFormatter.locale = Locale(identifier: "zh_CN")
+        timeFormatter.locale = locale
+        timeFormatter.calendar = calendar
         timeFormatter.dateFormat = "HH:mm"
         let time = timeFormatter.string(from: date)
 
-        guard weekly else {
-            return "\(time) 重置"
+        if calendar.isDate(date, inSameDayAs: referenceDate) {
+            return time
         }
 
-        let weekday = Calendar.current.component(.weekday, from: date)
-        let weekdayLabel = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][max(0, min(weekday - 1, 6))]
-        return "\(weekdayLabel) - \(time) 重置"
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: referenceDate),
+           calendar.isDate(date, inSameDayAs: yesterday) {
+            return "昨天 \(time)"
+        }
+
+        if let tomorrow = calendar.date(byAdding: .day, value: 1, to: referenceDate),
+           calendar.isDate(date, inSameDayAs: tomorrow) {
+            return "明天 \(time)"
+        }
+
+        let dateTimeFormatter = DateFormatter()
+        dateTimeFormatter.locale = locale
+        dateTimeFormatter.calendar = calendar
+        dateTimeFormatter.dateFormat = "MM月dd日 HH:mm"
+        return dateTimeFormatter.string(from: date)
+    }
+
+    public static func resetText(for window: UsageWindow?, weekly _: Bool) -> String {
+        guard let date = window?.resetAt else {
+            return "-"
+        }
+        return "\(relativeDateTimeText(for: date)) 重置"
     }
 }
