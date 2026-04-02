@@ -65,9 +65,14 @@ scripts/release.sh
 
 脚本会执行以下步骤：
 
-- 运行 `swift test`
 - 构建 Release 版本 `.app`
 - 在 `dist/` 下生成 `.zip` 和 `.dmg`
+
+如需本地先跑测试：
+
+```bash
+swift test
+```
 
 ## 使用说明
 
@@ -101,6 +106,7 @@ scripts/release.sh
 - Xcode 工程：`codex-switch.xcodeproj`
 - Swift Package 测试入口：`Package.swift`
 - 本地打包脚本：`scripts/release.sh`
+- 持续集成测试：`.github/workflows/ci.yml`
 - GitHub Actions 发布流程：`.github/workflows/release.yml`
 
 本地已验证：
@@ -114,6 +120,11 @@ scripts/release.sh
 1. 本地确认代码无误
 2. 创建并推送版本标签，例如 `v1.0.0`
 3. GitHub Actions 会自动构建应用，并上传 `.zip` 和 `.dmg` 到该版本的 Release 页面
+
+说明：
+
+- `CI` workflow 负责运行 `swift test`
+- `Release` workflow 只负责打包和上传发布产物
 
 示例：
 
