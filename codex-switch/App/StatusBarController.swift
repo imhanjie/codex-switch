@@ -93,13 +93,23 @@ final class StatusBarController: NSObject, NSWindowDelegate {
 
     private func configureStatusItem() {
         guard let button = statusItem.button else { return }
-        let image = NSImage(systemSymbolName: "hare.fill", accessibilityDescription: "Codex Switch")
-        image?.isTemplate = true
+        let image = makeStatusBarImage()
         button.image = image
         button.imagePosition = .imageOnly
         button.target = self
         button.action = #selector(handleStatusItemClick(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+    }
+
+    private func makeStatusBarImage() -> NSImage? {
+        let image = loadBundledStatusBarImage()
+        image?.isTemplate = true
+        image?.size = NSSize(width: 18, height: 18)
+        return image
+    }
+
+    private func loadBundledStatusBarImage() -> NSImage? {
+        NSImage(named: "codexTemplate")
     }
 
     private func showStatusMenu(from button: NSStatusBarButton, event: NSEvent?) {
