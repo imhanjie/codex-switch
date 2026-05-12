@@ -169,6 +169,7 @@ final class MenuBarViewModel: ObservableObject {
     @Published private(set) var isRefreshingUsage = false
     @Published private(set) var isRunningLogin = false
     @Published private(set) var pendingRecordKey: String?
+    @Published private(set) var pendingRemoval: AccountRemovalRequest?
     @Published private(set) var isCapturing = false
     @Published private(set) var isRemoving = false
 
@@ -312,8 +313,26 @@ final class MenuBarViewModel: ObservableObject {
         }
     }
 
-    func removeAccount(recordKey: String) {
+    func requestRemoveAccount(recordKey: String, email: String) {
         guard canRemoveAccount else { return }
+        pendingRemoval = AccountRemovalRequest(recordKey: recordKey, email: email)
+    }
+
+    func cancelPendingRemoval() {
+        pendingRemoval = nil
+    }
+
+    func confirmPendingRemoval() {
+        guard canRemoveAccount else { return }
+        guard let removal = pendingRemoval else { return }
+        confirmPendingRemoval(removal)
+    }
+
+    func confirmPendingRemoval(_ removal: AccountRemovalRequest) {
+        guard canRemoveAccount else { return }
+        if pendingRemoval == removal {
+            pendingRemoval = nil
+        }
         isRemoving = true
 
         Task { [weak self] in
@@ -321,7 +340,7 @@ final class MenuBarViewModel: ObservableObject {
             defer { self.isRemoving = false }
 
             do {
-                let account = try await self.service.removeAccount(recordKey: recordKey)
+                let account = try await self.service.removeAccount(recordKey: removal.recordKey)
                 self.notice = PanelNotice.success("已删除账号：\(account.email)")
                 await self.reloadDashboard(preserveNotice: true)
             } catch let error as CodexSwitchError {
@@ -444,6 +463,11 @@ struct AccountDisplayItem: Identifiable {
     var id: String {
         account.recordKey
     }
+}
+
+struct AccountRemovalRequest: Equatable {
+    let recordKey: String
+    let email: String
 }
 
 struct PanelNotice: Equatable {

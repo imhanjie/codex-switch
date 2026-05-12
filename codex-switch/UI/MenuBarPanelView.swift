@@ -24,6 +24,30 @@ struct MenuBarPanelView: View {
         }
         .frame(width: 344, height: 640)
         .background(Color.clear)
+        .alert(
+            "确认删除账号",
+            isPresented: removeConfirmationIsPresented,
+            presenting: viewModel.pendingRemoval
+        ) { removal in
+            Button("删除", role: .destructive) {
+                viewModel.confirmPendingRemoval(removal)
+            }
+            Button("取消", role: .cancel) {
+                viewModel.cancelPendingRemoval()
+            }
+        } message: { removal in
+            Text("只会删除本应用保存的账号快照：\(removal.email)。不会注销远端账号，也不会删除当前 live 登录态。")
+        }
+    }
+
+    private var removeConfirmationIsPresented: Binding<Bool> {
+        Binding {
+            viewModel.pendingRemoval != nil
+        } set: { isPresented in
+            if !isPresented {
+                viewModel.cancelPendingRemoval()
+            }
+        }
     }
 
     private var header: some View {
@@ -103,7 +127,10 @@ struct MenuBarPanelView: View {
                     accountCard(item)
                         .contextMenu {
                             Button(role: .destructive) {
-                                viewModel.removeAccount(recordKey: item.account.recordKey)
+                                viewModel.requestRemoveAccount(
+                                    recordKey: item.account.recordKey,
+                                    email: item.account.email
+                                )
                             } label: {
                                 Label("删除账号", systemImage: "trash")
                             }

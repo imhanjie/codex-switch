@@ -200,6 +200,97 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.pendingRecordKey)
     }
 
+    func testRequestRemoveAccountStoresPendingRemovalWithoutDeleting() async throws {
+        let service = MenuBarServiceStub(
+            dashboardSnapshot: makeDashboardSnapshotWithUsageCache(),
+            removeResult: ManagedAccount(
+                recordKey: "user-2::acct-2",
+                email: "two@example.com",
+                plan: "pro",
+                chatgptUserID: "user-2",
+                chatgptAccountID: "acct-2",
+                authMode: "chatgpt"
+            )
+        )
+        let scheduler = ManualUsageRefreshScheduler()
+        let viewModel = MenuBarViewModel(
+            service: service,
+            autoRefreshInterval: 300,
+            scheduler: scheduler
+        )
+
+        viewModel.requestRemoveAccount(recordKey: "user-2::acct-2", email: "two@example.com")
+        await waitForExpectations()
+
+        let removeCallCount = await service.recordedRemoveAccountCallCount()
+        XCTAssertEqual(removeCallCount, 0)
+        XCTAssertEqual(viewModel.pendingRemoval?.recordKey, "user-2::acct-2")
+        XCTAssertEqual(viewModel.pendingRemoval?.email, "two@example.com")
+        XCTAssertFalse(viewModel.isRemoving)
+        XCTAssertNil(viewModel.notice)
+    }
+
+    func testCancelPendingRemovalClearsPendingRemovalWithoutDeleting() async throws {
+        let service = MenuBarServiceStub(
+            dashboardSnapshot: makeDashboardSnapshotWithUsageCache(),
+            removeResult: ManagedAccount(
+                recordKey: "user-2::acct-2",
+                email: "two@example.com",
+                plan: "pro",
+                chatgptUserID: "user-2",
+                chatgptAccountID: "acct-2",
+                authMode: "chatgpt"
+            )
+        )
+        let scheduler = ManualUsageRefreshScheduler()
+        let viewModel = MenuBarViewModel(
+            service: service,
+            autoRefreshInterval: 300,
+            scheduler: scheduler
+        )
+
+        viewModel.requestRemoveAccount(recordKey: "user-2::acct-2", email: "two@example.com")
+        viewModel.cancelPendingRemoval()
+        await waitForExpectations()
+
+        let removeCallCount = await service.recordedRemoveAccountCallCount()
+        XCTAssertEqual(removeCallCount, 0)
+        XCTAssertNil(viewModel.pendingRemoval)
+        XCTAssertFalse(viewModel.isRemoving)
+    }
+
+    func testConfirmPendingRemovalDeletesAccountAndShowsSuccessNotice() async throws {
+        let service = MenuBarServiceStub(
+            dashboardSnapshot: makeDashboardSnapshotWithUsageCache(),
+            removeResult: ManagedAccount(
+                recordKey: "user-2::acct-2",
+                email: "two@example.com",
+                plan: "pro",
+                chatgptUserID: "user-2",
+                chatgptAccountID: "acct-2",
+                authMode: "chatgpt"
+            )
+        )
+        let scheduler = ManualUsageRefreshScheduler()
+        let viewModel = MenuBarViewModel(
+            service: service,
+            autoRefreshInterval: 300,
+            scheduler: scheduler
+        )
+
+        viewModel.requestRemoveAccount(recordKey: "user-2::acct-2", email: "two@example.com")
+        viewModel.confirmPendingRemoval()
+        await waitForExpectations()
+
+        let removeCallCount = await service.recordedRemoveAccountCallCount()
+        let removedRecordKey = await service.recordedRemovedRecordKey()
+        XCTAssertEqual(removeCallCount, 1)
+        XCTAssertEqual(removedRecordKey, "user-2::acct-2")
+        XCTAssertNil(viewModel.pendingRemoval)
+        XCTAssertEqual(viewModel.notice, .success("已删除账号：two@example.com"))
+        XCTAssertFalse(viewModel.isRemoving)
+    }
+
     func testThemeModeDefaultsToLightWhenNoPreferenceExists() {
         let service = MenuBarServiceStub()
         let scheduler = ManualUsageRefreshScheduler()
@@ -361,6 +452,7 @@ private actor MenuBarServiceStub: MenuBarServicing {
     private let refreshUsageResult: UsageRefreshResult
     private let loginResult: ManagedAccount
     private let switchResult: ManagedAccount
+    private let removeResult: ManagedAccount
     private let refreshDelay: UInt64
     private let loginDelay: UInt64
     private let switchDelay: UInt64
@@ -368,7 +460,9 @@ private actor MenuBarServiceStub: MenuBarServicing {
     private(set) var loadDashboardCallCount = 0
     private(set) var refreshUsageCallCount = 0
     private(set) var switchAccountCallCount = 0
+    private(set) var removeAccountCallCount = 0
     private(set) var switchedRecordKey: String?
+    private(set) var removedRecordKey: String?
 
     init(
         dashboardSnapshot: DashboardSnapshot = DashboardSnapshot(
@@ -396,6 +490,14 @@ private actor MenuBarServiceStub: MenuBarServicing {
             chatgptAccountID: "acct-1",
             authMode: "chatgpt"
         ),
+        removeResult: ManagedAccount = ManagedAccount(
+            recordKey: "user-1::acct-1",
+            email: "one@example.com",
+            plan: "team",
+            chatgptUserID: "user-1",
+            chatgptAccountID: "acct-1",
+            authMode: "chatgpt"
+        ),
         refreshDelay: UInt64 = 0,
         loginDelay: UInt64 = 0,
         switchDelay: UInt64 = 0
@@ -404,6 +506,7 @@ private actor MenuBarServiceStub: MenuBarServicing {
         self.refreshUsageResult = refreshUsageResult
         self.loginResult = loginResult
         self.switchResult = switchResult
+        self.removeResult = removeResult
         self.refreshDelay = refreshDelay
         self.loginDelay = loginDelay
         self.switchDelay = switchDelay
@@ -435,7 +538,9 @@ private actor MenuBarServiceStub: MenuBarServicing {
     }
 
     func removeAccount(recordKey: String) async throws -> ManagedAccount {
-        throw CodexSwitchError("unused")
+        removeAccountCallCount += 1
+        removedRecordKey = recordKey
+        return removeResult
     }
 
     func refreshUsage() async throws -> UsageRefreshResult {
@@ -458,8 +563,16 @@ private actor MenuBarServiceStub: MenuBarServicing {
         switchAccountCallCount
     }
 
+    func recordedRemoveAccountCallCount() -> Int {
+        removeAccountCallCount
+    }
+
     func recordedSwitchedRecordKey() -> String? {
         switchedRecordKey
+    }
+
+    func recordedRemovedRecordKey() -> String? {
+        removedRecordKey
     }
 }
 

@@ -90,7 +90,7 @@ public actor CodexSwitchService {
     }
 
     public func removeAccount(recordKey: String) throws -> ManagedAccount {
-        var (registry, _) = try loadAndSyncRequiredRegistry()
+        var registry = try store.loadRegistry(at: paths)
 
         guard !registry.accounts.isEmpty else {
             throw CodexSwitchError("当前没有任何已管理账号可删除。")

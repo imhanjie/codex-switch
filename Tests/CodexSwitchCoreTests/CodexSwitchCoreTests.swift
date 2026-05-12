@@ -106,6 +106,22 @@ final class CodexSwitchCoreTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: harness.paths.liveAuthURL), authB)
     }
 
+    func testRemoveDoesNotRequireParseableLiveAuth() async throws {
+        let harness = try TestHarness()
+        let auth = buildAuthData(email: "remove@example.com", userID: "user-remove", accountID: "acct-remove")
+        try harness.writeLiveAuth(auth)
+        _ = try await harness.service.captureCurrentAccount()
+        try harness.writeLiveAuth(Data(#"{"auth_mode":"apikey","OPENAI_API_KEY":"sk-test"}"#.utf8))
+
+        let removed = try await harness.service.removeAccount(recordKey: "user-remove::acct-remove")
+        let registry = try harness.store.loadRegistry(at: harness.paths)
+
+        XCTAssertEqual(removed.email, "remove@example.com")
+        XCTAssertTrue(registry.accounts.isEmpty)
+        XCTAssertNil(registry.activeRecordKey)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: harness.paths.snapshotURL(for: "user-remove::acct-remove").path))
+    }
+
     func testRefreshUsageUsesLiveOverrideWithoutRewritingSnapshot() async throws {
         let networking = RecordingUsageNetworking(
             responses: [
